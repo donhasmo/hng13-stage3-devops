@@ -1,0 +1,57 @@
+services:
+  app_blue:
+    image: ${BLUE_IMAGE}
+    container_name: app_blue
+    environment:
+      - PORT=${PORT}
+      - RELEASE_ID=${RELEASE_ID_BLUE}
+    expose:
+      - "${PORT}"
+
+  app_green:
+    image: ${GREEN_IMAGE}
+    container_name: app_green
+    environment:
+      - PORT=${PORT}
+      - RELEASE_ID=${RELEASE_ID_GREEN}
+    expose:
+      - "${PORT}"
+
+  nginx:
+    image: "nginx:stable-alpine"
+    container_name: nginx_bluegreen
+    depends_on:
+      - app_blue
+      - app_green
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
+      - ./nginx/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+      - nginx-logs:/var/log/nginx
+    environment:
+      - ACTIVE_POOL=${ACTIVE_POOL}
+    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
+    restart: always
+
+  log_tailer:
+    image: alpine:latest
+    container_name: log_tailer
+    depends_on:
+      - nginx
+    volumes:
+      - nginx-logs:/var/log/nginx
+    command: sh -c "tail -f /var/log/nginx/access.json.log"
+
+  alert_watcher:
+    build: ./alert_watcher
+    container_name: alert_watcher
+    depends_on:
+      - nginx
+    env_file: .env
+    volumes:
+      - nginx-logs:/var/log/nginx
+    restart: always
+
+volumes:
+  nginx-logs:
