@@ -48,12 +48,12 @@ docker ps
 
 echo "##########################"
 echo "Tailing Nginx log tailer output..."
-docker logs --tail 20 nginx_log_tailer
+docker logs --tail 20 log_tailer
 
 echo "##########################"
 echo "Confirming volume..."
 docker volume ls
-docker volume inspect nginx_logs
+docker volume inspect $(docker volume ls -q | grep nginx)
 
 
 # Stop App and remove containers
