@@ -31,12 +31,16 @@ sleep 5
 
 echo "##########################"
 echo "Verifying Green failover......"
-
 curl -s -D - http://localhost:8080/version | grep -E 'X-App-Pool|X-Release-Id'
 
 echo "##########################"
-echo "Stopping chaos"
+echo "Triggering high error rate alert..."
+# Append multiple fake 5xx logs to trigger alert
+docker exec -i nginx_bluegreen sh -c "for i in \$(seq 1 10); do echo '{\"status\":\"500\",\"x_app_pool\":\"blue\"}' >> /var/log/nginx/access.json.log; done"
+sleep 2
 
+echo "##########################"
+echo "Stopping chaos"
 curl -X POST "http://localhost:8081/chaos/stop"
 
 echo "##########################"
@@ -51,10 +55,6 @@ echo "Printing running containers..."
 docker ps
 
 echo "##########################"
-echo "Tailing Nginx log tailer output..."
-docker logs --tail 20 log_tailer
-
-echo "##########################"
 echo "Confirming volume..."
 docker volume ls
 docker volume inspect $(docker volume ls -q | grep nginx)
@@ -63,4 +63,4 @@ docker volume inspect $(docker volume ls -q | grep nginx)
 # Stop App and remove containers
 echo "##########################"
 echo "stopping containers........."
-docker-compose down -v
+#docker-compose down -v

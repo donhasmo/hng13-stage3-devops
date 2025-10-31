@@ -17,7 +17,7 @@ ALERT_COOLDOWN = int(os.getenv("ALERT_COOLDOWN", 60))
 MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "false").lower() == "true"
 
 # Rolling window to store recent logs (last N seconds)
-WINDOW_SIZE = 60
+WINDOW_SIZE = 10
 log_window = deque(maxlen=WINDOW_SIZE)
 
 last_alert_time = 0
