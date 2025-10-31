@@ -13,7 +13,7 @@ services:
       test: ["CMD-SHELL", "curl -fsS http://localhost:${PORT}/healthz || exit 1"]
       interval: 2s
       timeout: 2s
-      retries: 2
+      retries: 1
 
   app_green:
     image: "${GREEN_IMAGE}"
@@ -29,7 +29,7 @@ services:
       test: ["CMD-SHELL", "curl -fsS http://localhost:${PORT}/healthz || exit 1"]
       interval: 2s
       timeout: 2s
-      retries: 2
+      retries: 1
 
   nginx:
     image: "nginx:stable-alpine"
@@ -60,7 +60,7 @@ services:
       - ACTIVE_POOL=${ACTIVE_POOL}
       - NGINX_CONTAINER=nginx_bluegreen
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
-      - ERROR_THRESHOLD=${ERROR_THRESHOLD:-5}
+      - ERROR_THRESHOLD=${ERROR_THRESHOLD:-1}
       - ALERT_COOLDOWN=${ALERT_COOLDOWN:-60}
       - MAINTENANCE_MODE=${MAINTENANCE_MODE:-false}
     volumes:

@@ -27,6 +27,6 @@ while true; do
     fi
 
     # Watch ACTIVE_POOL changes every 2s
-    sleep 2
+    sleep 1
 done
 
