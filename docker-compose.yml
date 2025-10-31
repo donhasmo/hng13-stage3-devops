@@ -1,21 +1,35 @@
 services:
   app_blue:
-    image: ${BLUE_IMAGE}
+    image: "${BLUE_IMAGE}"
     container_name: app_blue
+    restart: always
     environment:
       - PORT=${PORT}
       - RELEASE_ID=${RELEASE_ID_BLUE}
-    expose:
-      - "${PORT}"
+      - APP_POOL=blue
+    ports:
+      - "8081:${PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:${PORT}/healthz || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 2
 
   app_green:
-    image: ${GREEN_IMAGE}
+    image: "${GREEN_IMAGE}"
     container_name: app_green
+    restart: always
     environment:
       - PORT=${PORT}
       - RELEASE_ID=${RELEASE_ID_GREEN}
-    expose:
-      - "${PORT}"
+      - APP_POOL=green
+    ports:
+      - "8082:${PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:${PORT}/healthz || exit 1"]
+      interval: 2s
+      timeout: 2s
+      retries: 2
 
   nginx:
     image: "nginx:stable-alpine"
@@ -25,14 +39,15 @@ services:
       - app_green
     ports:
       - "8080:80"
-      - "8081:8081"
     volumes:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
       - ./nginx/docker-entrypoint.sh:/docker-entrypoint.sh:ro
-      - nginx-logs:/var/log/nginx
+      - /var/log/nginx:/var/log/nginx
     environment:
       - ACTIVE_POOL=${ACTIVE_POOL}
-    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
+      - PRIMARY_NAME=
+      - BACKUP_NAME=
+    entrypoint: ["/bin/sh","/docker-entrypoint.sh"]
     restart: always
 
   log_tailer:
@@ -45,30 +60,18 @@ services:
     command: sh -c "tail -f /var/log/nginx/access.json.log"
 
   alert_watcher:
-    build: ./alert_watcher
+    build:
+     context: ./alert_watcher
     container_name: alert_watcher
     depends_on:
       - nginx
-    env_file: .env
-    volumes:
-      - nginx-logs:/var/log/nginx
-    restart: always
-
-  chaos_service:
-    build:
-      context: ./chaos_service
-    container_name: chaos_service
-    ports:
-      - "8081:8081"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock  # allows control over containers
-    depends_on:
-      - app_blue
-      - app_green
-      - nginx
     environment:
-      - FLASK_ENV=production
-    restart: unless-stopped
-
-volumes:
-  nginx-logs:
+      - ACTIVE_POOL=${ACTIVE_POOL}
+      - NGINX_CONTAINER=nginx_bluegreen
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - ERROR_THRESHOLD=${ERROR_THRESHOLD:-5}
+      - ALERT_COOLDOWN=${ALERT_COOLDOWN:-60}
+      - MAINTENANCE_MODE=${MAINTENANCE_MODE:-false}
+    volumes:
+      - /var/log/nginx:/var/log/nginx
+    restart: always

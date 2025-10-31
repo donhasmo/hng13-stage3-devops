@@ -51,10 +51,6 @@ echo "Printing running containers..."
 docker ps
 
 echo "##########################"
-echo "Tailing Nginx log tailer output..."
-docker logs --tail 20 log_tailer
-
-echo "##########################"
 echo "Confirming volume..."
 docker volume ls
 docker volume inspect $(docker volume ls -q | grep nginx)
