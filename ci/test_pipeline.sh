@@ -1,9 +1,13 @@
 #!/bin/bash
 set -e
 
+# Load .env variables into this script
+export $(grep -v '^#' .env | xargs)
+
 echo "##########################"
 echo "Starting services..."
-docker-compose up -d
+# Explicitly tell Compose to use the .env file
+docker-compose --env-file .env up -d
 sleep 5
 
 # Verify Blue App running
