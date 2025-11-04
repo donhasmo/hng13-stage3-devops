@@ -1,119 +1,55 @@
-import os
 import json
 import time
-import requests
 from collections import deque
-from datetime import datetime
 
-# ===========================================
-# CONFIGURATION
-# ===========================================
 LOG_FILE = "/var/log/nginx/access.json.log"
+WINDOW_SIZE = 200              # Number of recent requests to analyze
+ERROR_RATE_THRESHOLD = 0.02    # 2%
 
-# Read environment variables (with defaults)
-SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "")
-ERROR_THRESHOLD = float(os.getenv("ERROR_THRESHOLD", 5))
-ALERT_COOLDOWN = int(os.getenv("ALERT_COOLDOWN", 60))
-MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "false").lower() == "true"
-
-# Rolling window to store recent logs (last N seconds)
-WINDOW_SIZE = 10
-log_window = deque(maxlen=WINDOW_SIZE)
-
-last_alert_time = 0
-last_pool = None
-
-# ===========================================
-# FUNCTION: Send message to Slack
-# ===========================================
-def send_slack_alert(message):
-    global last_alert_time
-    if not SLACK_WEBHOOK_URL:
-        print("SLACK_WEBHOOK_URL not set, skipping alert.")
-        return
-
-    # Respect cooldown
-    now = time.time()
-    if now - last_alert_time < ALERT_COOLDOWN:
-        print("In cooldown, skipping alert.")
-        return
-
-    data = {"text": f":rotating_light: {message}"}
+def is_5xx(status):
     try:
-        requests.post(SLACK_WEBHOOK_URL, json=data)
-        print(f"Alert sent: {message}")
-        last_alert_time = now
-    except Exception as e:
-        print(f"Failed to send Slack alert: {e}")
+        code = int(status)
+        return 500 <= code < 600
+    except:
+        return False
 
-# ===========================================
-# FUNCTION: Analyze recent logs
-# ===========================================
-def analyze_logs():
-    if MAINTENANCE_MODE:
-        print("Maintenance mode enabled. Skipping analysis.")
-        return
+def monitor_log():
+    print(f"🚀 Alert Watcher started — monitoring {LOG_FILE}")
+    recent_requests = deque(maxlen=WINDOW_SIZE)
 
-    total = len(log_window)
-    if total == 0:
-        return
+    with open(LOG_FILE, "r") as log:
+        # Seek to end of file to only watch new logs
+        log.seek(0, 2)
+        while True:
+            line = log.readline()
+            if not line:
+                time.sleep(1)
+                continue
 
-    errors = [log for log in log_window if log.get("status", "").startswith("5")]
-    error_rate = (len(errors) / total) * 100
-
-    if error_rate > ERROR_THRESHOLD:
-        send_slack_alert(f"High 5xx error rate detected! ({error_rate:.1f}% in last {WINDOW_SIZE}s)")
-
-# ===========================================
-# FUNCTION: Detect Pool Flip
-# ===========================================
-def detect_pool_flip(current_pool):
-    global last_pool
-    if last_pool is None:
-        last_pool = current_pool
-    elif current_pool != last_pool:
-        send_slack_alert(f"Nginx switched pool from {last_pool} → {current_pool}")
-        last_pool = current_pool
-
-# ===========================================
-# MAIN LOOP: Tail log file and monitor
-# ===========================================
-def follow(file):
-    file.seek(0, 2)  # move to end of file
-    while True:
-        line = file.readline()
-        if not line:
-            time.sleep(0.5)
-            continue
-        yield line
-
-def main():
-    print("Starting alert watcher...")
-    if not os.path.exists(LOG_FILE):
-        print(f"Log file not found: {LOG_FILE}")
-        return
-
-    with open(LOG_FILE, "r") as f:
-        log_lines = follow(f)
-        for line in log_lines:
             try:
-                data = json.loads(line.strip())
-                log_window.append(data)
+                entry = json.loads(line.strip())
+                status = entry.get("status")
+                pool = entry.get("x_app_pool", "unknown")
 
-                # Extract status and x_app_pool
-                status = str(data.get("status", ""))
-                current_pool = data.get("x_app_pool", "")
+                recent_requests.append({
+                    "status": status,
+                    "pool": pool,
+                    "is_5xx": is_5xx(status)
+                })
 
-                # Detect pool changes
-                if current_pool:
-                    detect_pool_flip(current_pool)
+                if len(recent_requests) >= WINDOW_SIZE:
+                    # Calculate 5xx error rate
+                    total_5xx = sum(1 for r in recent_requests if r["is_5xx"])
+                    error_rate = total_5xx / WINDOW_SIZE
 
-                # Analyze error rate periodically
-                if len(log_window) == log_window.maxlen:
-                    analyze_logs()
+                    print(f"[STATS] Last {WINDOW_SIZE} requests: {total_5xx} were 5xx ({error_rate*100:.2f}%)")
 
+                    if error_rate > ERROR_RATE_THRESHOLD:
+                        print(f"[ALERT] High 5xx error rate ({error_rate*100:.2f}%) detected on *{pool}*")
+                        # You could then trigger the redeploy/flip here
             except json.JSONDecodeError:
                 continue
 
 if __name__ == "__main__":
-    main()
+    monitor_log()
+

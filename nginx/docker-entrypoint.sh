@@ -1,32 +1,18 @@
 #!/bin/sh
-set -eu
+set -e
 
-# fallback
-PORT=${PORT:-3000}
+# Decide primary/backup based on ACTIVE_POOL
+if [ "$ACTIVE_POOL" = "blue" ]; then
+    export PRIMARY_NAME=app_blue
+    export BACKUP_NAME=app_green
+else
+    export PRIMARY_NAME=app_green
+    export BACKUP_NAME=app_blue
+fi
 
-while true; do
-    # Determine primary/backup based on ACTIVE_POOL
-    if [ "${ACTIVE_POOL:-}" = "green" ]; then
-      PRIMARY_NAME=app_green
-      BACKUP_NAME=app_blue
-    else
-      PRIMARY_NAME=app_blue
-      BACKUP_NAME=app_green
-    fi
+# Generate nginx.conf from template
+envsubst '${PRIMARY_NAME} ${BACKUP_NAME} ${PORT}' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
 
-    export PRIMARY_NAME BACKUP_NAME PORT
-
-    # Render nginx.conf
-    envsubst '$PRIMARY_NAME $BACKUP_NAME $PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
-
-    # Start nginx if not already running
-    if ! pgrep nginx > /dev/null; then
-        nginx -g "daemon off;" &
-    else
-        nginx -s reload
-    fi
-
-    # Watch ACTIVE_POOL changes every 2s
-    sleep 1
-done
+echo "Starting nginx with PRIMARY=${PRIMARY_NAME}, BACKUP=${BACKUP_NAME} (active=${ACTIVE_POOL})"
+nginx -g 'daemon off;'
 

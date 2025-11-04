@@ -32,7 +32,7 @@ services:
       retries: 1
 
   nginx:
-    image: "nginx:stable-alpine"
+    image: nginx:stable-alpine
     container_name: nginx_bluegreen
     depends_on:
       - app_blue
@@ -45,10 +45,10 @@ services:
       - /var/log/nginx:/var/log/nginx
     environment:
       - ACTIVE_POOL=${ACTIVE_POOL}
-      - PRIMARY_NAME=
-      - BACKUP_NAME=
-    entrypoint: ["/bin/sh","/docker-entrypoint.sh"]
+      - PORT=${PORT}
+    entrypoint: ["/bin/sh", "/docker-entrypoint.sh"]
     restart: always
+
 
   alert_watcher:
     build:
@@ -56,13 +56,13 @@ services:
     container_name: alert_watcher
     depends_on:
       - nginx
-    environment:
-      - ACTIVE_POOL=${ACTIVE_POOL}
-      - NGINX_CONTAINER=nginx_bluegreen
-      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
-      - ERROR_THRESHOLD=${ERROR_THRESHOLD:-1}
-      - ALERT_COOLDOWN=${ALERT_COOLDOWN:-60}
-      - MAINTENANCE_MODE=${MAINTENANCE_MODE:-false}
+    env_file:
+      - .env
     volumes:
       - /var/log/nginx:/var/log/nginx
+      - /var/run/docker.sock:/var/run/docker.sock   
+      - ./.env:/app/.env       
     restart: always
+
+volumes:
+  nginx_logs:    
