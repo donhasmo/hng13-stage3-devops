@@ -1,13 +1,13 @@
+import os
 import json
 import time
 from collections import deque
 import subprocess
 
 LOG_FILE = "/var/log/nginx/access.json.log"
-WINDOW_SIZE = 200
-ERROR_RATE_THRESHOLD = 0.02  # 2%
-FLIP_COOLDOWN_SECONDS = 30   # Minimum seconds between flips
-
+WINDOW_SIZE = int(os.getenv("WINDOW_SIZE", 50))
+ERROR_RATE_THRESHOLD = float(os.getenv("ERROR_THRESHOLD", 2)) / 100
+FLIP_COOLDOWN_SECONDS = int(os.getenv("FLIP_COOLDOWN_SECONDS", 30))
 NGINX_CONF = "/etc/nginx/nginx.conf"
 
 current_pool = "blue"

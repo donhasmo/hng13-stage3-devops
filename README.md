@@ -19,27 +19,44 @@ docker-compose up -d --build
 ### 2.1 Confirm app
 curl -s -D - http://localhost:8080/version | grep -E 'X-App-Pool|X-Release-Id'
 
-### 3. Simulate failover
+### 3. Simulate failover to green_app with high error rate
+- Make Enough request for logs to reach window size:
+  for i in {1..50}; do
+    curl -s http://localhost:8080/version > /dev/null
+  done
+- Check alert_watcher logs:
+  docker logs alert_watcher
 - Stop the currently active app container to cause Nginx to start using the other pool:
   curl -X POST "http://localhost:8081/chaos/start?mode=error"
-- You should see a Slack alert like "Failover detected: BLUE → GREEN".
-- Check the headers to confirm failover:
-  curl -s -D - http://localhost:8080/version | grep -E 'X-App-Pool|X-Release-Id'
+- Send Enough request for logs error threshold to reach:
+  curl -s http://localhost:8080/version
+- Check alert_watcher logs again:
+  docker logs alert_watcher
 
 ### 3.1 Stop chaos and confirm failover
   curl -X POST "http://localhost:8081/chaos/stop"
 - Check headers:
   curl -s -D - http://localhost:8080/version | grep -E 'X-App-Pool|X-Release-Id'
 
-### 4. Simulate high error rate
-- Produce 5xx responses from the active upstream
-- Once the 5xx rate over the window exceeds ERROR_RATE_THRESHOLD, the watcher posts an error-rate alert.
-  for i in {1..200}; do
+### 4. Revert back to blue_app
+- Confirm running app(green_app should be running) :
+  curl -s -D - http://localhost:8080/version | grep -E 'X-App-Pool|X-Release-Id'
+- Make enough request to make error lower than threshold by sending more success request:
+  for i in {1..50}; do
     curl -s http://localhost:8080/version > /dev/null
   done
+- Confirm revert(blue_app should be running) :
+  curl -s -D - http://localhost:8080/version | grep -E 'X-App-Pool|X-Release-Id'
 
-### 5. Inspect logs
-- Nginx logs (sample line): `docker-compose exec nginx cat /var/log/nginx/access.json | jq .`
-- Watch the `alert_watcher` logs:
-  docker-compose logs -f alert_watcher
+- Check alert_watcher logs again:
+  docker logs alert_watcher
 
+### 4.1 Stop chaos and confirm failover
+- Wait for cooldown time to reach and trigger error on current app:
+  curl -X POST "http://localhost:8082/chaos/stop"
+- Check headers:
+  curl -s -D - http://localhost:8080/version | grep -E 'X-App-Pool|X-Release-Id'
+
+for i in {1..200}; do
+    curl -s http://localhost:8080/version > /dev/null
+  done
